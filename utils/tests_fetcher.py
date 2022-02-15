@@ -17,6 +17,7 @@ import argparse
 import collections
 import os
 import re
+import glob
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from git import Repo
 
 # This script is intended to be run from the root of the repo but you can adapt this constant if you need to.
 PATH_TO_TRANFORMERS = "."
+ALL_TEST_FILES = list(glob.iglob('tests/**/*.py', recursive=True))
 
 
 @contextmanager
@@ -254,47 +256,48 @@ def create_reverse_dependency_map():
 # Any module file that has a test name which can't be inferred automatically from its name should go here. A better
 # approach is to (re-)name the test file accordingly, and second best to add the correspondence map here.
 SPECIAL_MODULE_TO_TEST_MAP = {
-    "commands/add_new_model_like.py": "test_add_new_model_like.py",
+    "training_args.py": "utils/tests_hf_argparser.py",
+    "commands/add_new_model_like.py": "utils/test_add_new_model_like.py",
     "configuration_utils.py": "test_configuration_common.py",
-    "convert_graph_to_onnx.py": "test_onnx.py",
-    "data/data_collator.py": "test_data_collator.py",
+    "convert_graph_to_onnx.py": "onnx/test_onnx.py",
+    "data/data_collator.py": "trainer/test_data_collator.py",
     "deepspeed.py": "deepspeed/",
     "feature_extraction_sequence_utils.py": "test_sequence_feature_extraction_common.py",
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
-    "file_utils.py": ["test_file_utils.py", "test_model_output.py"],
-    "modelcard.py": "test_model_card.py",
+    "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
+    "modelcard.py": "utils/test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
-    "modeling_tf_utils.py": ["test_modeling_tf_common.py", "test_modeling_tf_core.py"],
+    "modeling_tf_utils.py": ["test_modeling_tf_common.py", "utils/test_modeling_tf_core.py"],
     "modeling_utils.py": ["test_modeling_common.py", "test_offline.py"],
-    "models/auto/modeling_auto.py": ["test_modeling_auto.py", "test_modeling_tf_pytorch.py", "test_modeling_bort.py"],
-    "models/auto/modeling_flax_auto.py": "test_modeling_flax_auto.py",
+    "models/auto/modeling_auto.py": ["auto/test_modeling_auto.py", "auto/test_modeling_tf_pytorch.py", "bort/test_modeling_bort.py"],
+    "models/auto/modeling_flax_auto.py": "auto/test_modeling_flax_auto.py",
     "models/auto/modeling_tf_auto.py": [
-        "test_modeling_tf_auto.py",
-        "test_modeling_tf_pytorch.py",
-        "test_modeling_tf_bort.py",
+        "auto/test_modeling_tf_auto.py",
+        "auto/test_modeling_tf_pytorch.py",
+        "auto/test_modeling_tf_bort.py",
     ],
-    "models/blenderbot_small/tokenization_blenderbot_small.py": "test_tokenization_small_blenderbot.py",
-    "models/blenderbot_small/tokenization_blenderbot_small_fast.py": "test_tokenization_small_blenderbot.py",
-    "models/gpt2/modeling_gpt2.py": ["test_modeling_gpt2.py", "test_modeling_megatron_gpt2.py"],
-    "pipelines/base.py": "test_pipelines_*.py",
+    "models/blenderbot_small/tokenization_blenderbot_small.py": "blenderbot_small/test_tokenization_small_blenderbot.py",
+    "models/blenderbot_small/tokenization_blenderbot_small_fast.py": "blenderbot_small/test_tokenization_small_blenderbot.py",
+    "models/gpt2/modeling_gpt2.py": ["gpt2/test_modeling_gpt2.py", "megatron_gpt2/test_modeling_megatron_gpt2.py"],
+    "pipelines/base.py": "pipelines/test_pipelines_*.py",
     "pipelines/text2text_generation.py": [
-        "test_pipelines_text2text_generation.py",
-        "test_pipelines_summarization.py",
-        "test_pipelines_translation.py",
+        "pipelines/test_pipelines_text2text_generation.py",
+        "pipelines/test_pipelines_summarization.py",
+        "pipelines/test_pipelines_translation.py",
     ],
-    "pipelines/zero_shot_classification.py": "test_pipelines_zero_shot.py",
-    "testing_utils.py": "test_skip_decorators.py",
+    "pipelines/zero_shot_classification.py": "pipelines/test_pipelines_zero_shot.py",
+    "testing_utils.py": "utils/test_skip_decorators.py",
     "tokenization_utils.py": "test_tokenization_common.py",
     "tokenization_utils_base.py": "test_tokenization_common.py",
-    "tokenization_utils_fast.py": "test_tokenization_fast.py",
+    "tokenization_utils_fast.py": "tokenization/test_tokenization_fast.py",
     "trainer.py": [
-        "test_trainer.py",
+        "trainer/test_trainer.py",
         "extended/test_trainer_ext.py",
-        "test_trainer_distributed.py",
-        "test_trainer_tpu.py",
+        "trainer/test_trainer_distributed.py",
+        "trainer/test_trainer_tpu.py",
     ],
-    "train_pt_utils.py": "test_trainer_utils.py",
-    "utils/versions.py": "test_versions_utils.py",
+    "train_pt_utils.py": "trainer/test_trainer_utils.py",
+    "utils/versions.py": "utils/test_versions_utils.py",
 }
 
 
@@ -317,23 +320,30 @@ def module_to_test_file(module_fname):
     if module_name.endswith("_fast.py"):
         module_name = module_name.replace("_fast.py", ".py")
 
+    if module_fname.startswith("processing"):
+        module_fname.replace('processing', 'processor')
+
     # Special case for pipelines submodules
     if len(splits) >= 2 and splits[-2] == "pipelines":
-        default_test_file = f"tests/test_pipelines_{module_name}"
+        default_test_file = f"tests/pipelines/test_pipelines_{module_name}"
     # Special case for benchmarks submodules
     elif len(splits) >= 2 and splits[-2] == "benchmark":
-        return ["tests/test_benchmark.py", "tests/test_benchmark_tf.py"]
+        return ["tests/benchmark/test_benchmark.py", "tests/benchmark/test_benchmark_tf.py"]
     # Special case for commands submodules
     elif len(splits) >= 2 and splits[-2] == "commands":
-        return "tests/test_cli.py"
+        return "tests/utils/test_cli.py"
     # Special case for onnx submodules
     elif len(splits) >= 2 and splits[-2] == "onnx":
-        return ["tests/test_onnx.py", "tests/test_onnx_v2.py"]
+        return ["tests/onnx/test_onnx.py", "tests/onnx/test_onnx_v2.py"]
     # Special case for utils (not the one in src/transformers, the ones at the root of the repo).
     elif len(splits) > 0 and splits[0] == "utils":
-        default_test_file = f"tests/test_utils_{module_name}"
+        default_test_file = f"tests/utils/test_utils_{module_name}"
     else:
-        default_test_file = f"tests/test_{module_name}"
+        possible_module_names = [file for file in ALL_TEST_FILES if module_name in file]
+        if len(possible_module_names) == 1:
+            default_test_file = possible_module_names[0]
+        else:
+            return
 
     if os.path.isfile(default_test_file):
         return default_test_file
@@ -383,6 +393,8 @@ def sanity_check():
                 test_files_found.append(test_f)
             else:
                 test_files_found.extend(test_f)
+        else:
+            print(f, test_f)
 
     # Some of the test files might actually be subfolders so we grab the tests inside.
     test_files = []
