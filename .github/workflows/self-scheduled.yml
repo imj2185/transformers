@@ -68,8 +68,6 @@ jobs:
           utils/print_env_pt.py
           TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
           TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
-          python3 -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
-          python3 -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
 
   run_tests_gpu:
     name: Model tests
