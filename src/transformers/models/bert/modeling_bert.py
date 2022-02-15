@@ -51,6 +51,7 @@ from ...modeling_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
+    revert_pruned_linear_layer,
 )
 from ...utils import logging
 from .configuration_bert import BertConfig
@@ -228,12 +229,22 @@ class BertSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.mask_heads = []
+        self._head_mask = None
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
+
+    @property
+    def head_mask(self):
+        if self._head_mask is None:
+            self._head_mask = torch.ones(self.num_attention_heads)
+            for head_idx in self.mask_heads:
+                self._head_mask[head_idx] = 0
+        return self._head_mask.view(1, self.num_attention_heads, 1, 1)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -323,6 +334,8 @@ class BertSelfAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
+        self.context_layer_val = context_layer
+        self.context_layer_val.retain_grad()
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -373,6 +386,18 @@ class BertAttention(nn.Module):
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
+
+    def revert_heads(self, heads, other=None):
+        # Prune linear layers
+        self.self.query = revert_pruned_linear_layer(other.self.query)
+        self.self.key = revert_pruned_linear_layer(other.self.key)
+        self.self.value = revert_pruned_linear_layer(other.self.value)
+        self.output.dense = revert_pruned_linear_layer(other.output.dense)
+
+        # Update hyper params and store pruned heads
+        self.self.num_attention_heads = self.self.num_attention_heads + len(heads)
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.pruned_heads = set()
 
     def forward(
         self,

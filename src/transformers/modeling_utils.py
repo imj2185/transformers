@@ -1865,6 +1865,34 @@ def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) 
     return new_layer
 
 
+def revert_pruned_linear_layer(base_layer: torch.nn.Linear) -> torch.nn.Linear:
+    """
+    Revert a linear layer back to the original entries before the pruning.
+
+    Used to recover heads.
+
+    Args:
+        base_layer (:obj:`torch.nn.Linear`): The layer to recover.
+
+    Returns:
+        :obj:`torch.nn.Linear`: The recovered layer as a new layer with :obj:`requires_grad=True`.
+    """
+    W = base_layer.weight.clone().detach()
+    if base_layer.bias is not None:
+        b = base_layer.bias.clone().detach()
+
+    new_size = list(base_layer.weight.size())
+    new_layer = torch.nn.Linear(new_size[1], new_size[0], bias=base_layer.bias is not None).to(base_layer.weight.device)
+    new_layer.weight.requires_grad = False
+    new_layer.weight.copy_(W.contiguous())
+    new_layer.weight.requires_grad = True
+    if base_layer.bias is not None:
+        new_layer.bias.requires_grad = False
+        new_layer.bias.copy_(b.contiguous())
+        new_layer.bias.requires_grad = True
+    return new_layer
+
+
 def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> Conv1D:
     """
     Prune a Conv1D layer to keep only entries in index. A Conv1D work as a Linear layer (see e.g. BERT) but the weights
